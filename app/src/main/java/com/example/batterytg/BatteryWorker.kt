@@ -11,8 +11,8 @@ import java.net.URLEncoder
 class BatteryWorker(ctx: Context, params: WorkerParameters) : Worker(ctx, params) {
 
     // TODO: put your NEW token and chat id here
-    private val botToken = "YOUR_BOT_TOKEN"
-    private val chatId = "YOUR_CHAT_ID"
+    private val botToken = "8964236884:AAFpEYAnNa4uhdBjLWlX4JXillOsmejuMaU"
+    private val chatId = "101098680"
 
     override fun doWork(): Result {
         val bm = applicationContext.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
