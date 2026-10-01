@@ -8,7 +8,7 @@ android {
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.example.batterytg"
+        applicationId = "com.battery.reporter"
         minSdk = 24
         targetSdk = 34
         versionCode = 2
