@@ -1,0 +1,7 @@
+<resources>
+    <color name="bg">#1B1F23</color>
+    <color name="accent">#2ECC71</color>
+    <color name="text_primary">#F5F5F5</color>
+    <color name="text_secondary">#B0B0B0</color>
+    <color name="field_bg">#2A2F34</color>
+</resources>
