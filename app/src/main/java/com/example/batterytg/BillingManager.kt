@@ -62,8 +62,6 @@ class BillingManager(private val activity: Activity, private val onResult: (succ
                     productDetails = productDetailsList[0]
                     launchFlow(productDetailsList[0])
                 }
-
-                
             }
 
             override fun onBillingServiceDisconnected() {
