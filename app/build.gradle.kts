@@ -10,7 +10,7 @@ android {
     defaultConfig {
         applicationId = "com.battery.reporter"
         minSdk = 24
-        targetSdk = 34
+        targetSdk = 36
         versionCode = 2
         versionName = "2.0"
     }
@@ -54,5 +54,5 @@ android {
 
 dependencies {
     implementation("androidx.work:work-runtime-ktx:2.9.1")
-    implementation("com.android.billingclient:billing-ktx:6.2.1")
+    implementation("com.android.billingclient:billing-ktx:8.0.0")
 }
