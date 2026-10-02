@@ -6,15 +6,6 @@ import com.android.billingclient.api.*
 
 /**
  * Handles the "Upgrade to Premium" purchase.
- *
- * SETUP REQUIRED BEFORE THIS WORKS:
- * 1. Create a release listing for this app in Google Play Console (Internal Testing track is enough).
- * 2. Under Monetize > Products > In-app products, create a product with the exact ID
- *    "premium_5_devices" below.
- * 3. Add your Google account as a License Tester so you can complete test purchases
- *    for free while developing.
- * Until step 2 is done, queryProductDetails will return nothing and the button will
- * show "Upgrade not available yet".
  */
 class BillingManager(private val activity: Activity, private val onResult: (success: Boolean, message: String) -> Unit) {
 
@@ -54,7 +45,7 @@ class BillingManager(private val activity: Activity, private val onResult: (succ
                     .setProductList(listOf(product))
                     .build()
 
-                billingClient.queryProductDetailsAsync(params) { result, productDetailsList ->
+                billingClient.queryProductDetailsAsync(params) { result: BillingResult, productDetailsList: List<ProductDetails>? ->
                     val firstProduct = productDetailsList?.firstOrNull()
 
                     if (result.responseCode != BillingClient.BillingResponseCode.OK || firstProduct == null) {
@@ -86,7 +77,6 @@ class BillingManager(private val activity: Activity, private val onResult: (succ
     private fun handlePurchase(purchase: Purchase) {
         if (purchase.purchaseState != Purchase.PurchaseState.PURCHASED) return
 
-        // Acknowledge the purchase with Google, then tell our server to unlock this chat.
         if (!purchase.isAcknowledged) {
             val ackParams = AcknowledgePurchaseParams.newBuilder()
                 .setPurchaseToken(purchase.purchaseToken)
