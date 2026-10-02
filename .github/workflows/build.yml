@@ -3,6 +3,11 @@ on: workflow_dispatch
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      RELEASE_KEYSTORE_PATH: ${{ github.workspace }}/release.keystore
+      RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+      RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+      RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -12,13 +17,14 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.7
-      - name: Ensure debug keystore exists
-        run: |
-          mkdir -p ~/.android
-          keytool -genkey -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
-      - run: gradle :app:assembleRelease
+      - name: Decode release keystore
+        run: echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > "$RELEASE_KEYSTORE_PATH"
+      - name: Build signed release AAB and APK
+        run: gradle :app:bundleRelease :app:assembleRelease
       - uses: actions/upload-artifact@v4
         with:
-          name: BatteryReporter-apk
-          path: app/build/outputs/apk/release/*.apk
+          name: BatteryReporter-release-bundle-and-apk
+          path: |
+            app/build/outputs/bundle/release/*.aab
+            app/build/outputs/apk/release/*.apk
           
