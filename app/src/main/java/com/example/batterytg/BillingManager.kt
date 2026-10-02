@@ -55,12 +55,12 @@ class BillingManager(private val activity: Activity, private val onResult: (succ
                     .build()
 
                 billingClient.queryProductDetailsAsync(params) { result, productDetailsList ->
-                    if (result.responseCode != BillingClient.BillingResponseCode.OK || productDetailsList.isNullOrEmpty()) {
+                    if (result.responseCode != BillingClient.BillingResponseCode.OK || productDetailsList == null || productDetailsList.isEmpty()) {
                         onResult(false, "Upgrade not available yet. (Product not configured in Play Console.)")
                         return@queryProductDetailsAsync
                     }
-                    productDetails = productDetailsList[0]
-                    launchFlow(productDetailsList[0])
+                    productDetails = productDetailsList!![0]
+                    launchFlow(productDetailsList!![0])
                 }
             }
 
