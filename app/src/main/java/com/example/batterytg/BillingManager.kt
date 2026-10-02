@@ -7,7 +7,7 @@ import com.android.billingclient.api.*
 /**
  * Handles the "Upgrade to Premium" purchase.
  *
- * SETUP REQUIRED BEFORE THIS WORKS (see chat instructions):
+ * SETUP REQUIRED BEFORE THIS WORKS:
  * 1. Create a release listing for this app in Google Play Console (Internal Testing track is enough).
  * 2. Under Monetize > Products > In-app products, create a product with the exact ID
  *    "premium_5_devices" below.
@@ -55,12 +55,15 @@ class BillingManager(private val activity: Activity, private val onResult: (succ
                     .build()
 
                 billingClient.queryProductDetailsAsync(params) { result, productDetailsList ->
-                    if (result.responseCode != BillingClient.BillingResponseCode.OK || productDetailsList == null || productDetailsList.isEmpty()) {
+                    val firstProduct = productDetailsList?.firstOrNull()
+
+                    if (result.responseCode != BillingClient.BillingResponseCode.OK || firstProduct == null) {
                         onResult(false, "Upgrade not available yet. (Product not configured in Play Console.)")
                         return@queryProductDetailsAsync
                     }
-                    productDetails = productDetailsList!![0]
-                    launchFlow(productDetailsList!![0])
+
+                    productDetails = firstProduct
+                    launchFlow(firstProduct)
                 }
             }
 
