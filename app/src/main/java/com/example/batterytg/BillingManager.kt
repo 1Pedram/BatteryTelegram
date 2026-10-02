@@ -45,8 +45,8 @@ class BillingManager(private val activity: Activity, private val onResult: (succ
                     .setProductList(listOf(product))
                     .build()
 
-                billingClient.queryProductDetailsAsync(params) { result: BillingResult, productDetailsList: List<ProductDetails>? ->
-                    val firstProduct = productDetailsList?.firstOrNull()
+                billingClient.queryProductDetailsAsync(params) { result, queryResult ->
+                    val firstProduct = queryResult.productDetailsList?.firstOrNull()
 
                     if (result.responseCode != BillingClient.BillingResponseCode.OK || firstProduct == null) {
                         onResult(false, "Upgrade not available yet. (Product not configured in Play Console.)")
