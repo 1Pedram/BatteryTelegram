@@ -36,7 +36,7 @@ class BillingManager(private val activity: Activity, private val onResult: (succ
 
     private val billingClient: BillingClient = BillingClient.newBuilder(activity)
         .setListener(purchasesListener)
-        .enablePendingPurchases()
+        .enablePendingPurchases(PendingPurchasesParams.newBuilder().enableOneTimeProducts().build())
         .build()
 
     fun startPurchaseFlow() {
