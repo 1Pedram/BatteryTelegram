@@ -1,58 +1,51 @@
 plugins {
-    id("com.android.application")
-    id("org.jetbrains.kotlin.android")
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
 }
 
 android {
-    namespace = "com.example.batterytg"
-    compileSdk = 34
+    namespace = "com.pedro.batteryreporter"
+    compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.battery.reporter"
-        minSdk = 24
-        targetSdk = 36
-        versionCode = 3
-        versionName = "3.0"
-    }
+        applicationId = "com.pedro.batteryreporter"
+        minSdk = 26
+        targetSdk = 35
+        versionCode = 10001
+        versionName = "1.0.1"
 
-    buildFeatures {
-        buildConfig = true
-    }
-
-    signingConfigs {
-        create("release") {
-            val ksPath = System.getenv("RELEASE_KEYSTORE_PATH")
-            if (ksPath != null) {
-                storeFile = file(ksPath)
-                storePassword = System.getenv("RELEASE_KEYSTORE_PASSWORD")
-                keyAlias = System.getenv("RELEASE_KEY_ALIAS")
-                keyPassword = System.getenv("RELEASE_KEY_PASSWORD")
-            }
-        }
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
-            // Signs with the real release key when CI provides one; falls back to the
-            // debug key otherwise so the project still builds without secrets configured.
-            signingConfig = if (System.getenv("RELEASE_KEYSTORE_PATH") != null) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
-            }
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "17" }
+    kotlinOptions {
+        jvmTarget = "17"
+    }
 }
 
 dependencies {
-    implementation("androidx.work:work-runtime-ktx:2.9.1")
-    implementation("com.android.billingclient:billing-ktx:8.0.0")
+    implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.appcompat:appcompat:1.7.0")
+    implementation("com.google.android.material:material:1.12.0")
+    implementation("androidx.constraintlayout:constraintlayout:2.2.0")
+
+    // WorkManager for background battery check
+    implementation("androidx.work:work-runtime-ktx:2.10.0")
+
+    // Modern HTTP engine
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 }
