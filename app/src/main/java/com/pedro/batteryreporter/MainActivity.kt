@@ -1,5 +1,9 @@
 package com.pedro.batteryreporter
 
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.Bundle
 import android.view.View
 import android.widget.Toast
@@ -21,6 +25,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var prefs: PrefsManager
     private val client = OkHttpClient()
 
+    // Live receiver that listens to charging & battery changes in real time
+    private val liveBatteryReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            updateLiveStatus()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
@@ -29,6 +40,25 @@ class MainActivity : AppCompatActivity() {
         prefs = PrefsManager(this)
         setupUI()
         updateLiveStatus()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        updateLiveStatus()
+        // Register receiver for instant live changes when plugging/unplugging
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_BATTERY_CHANGED)
+            addAction(Intent.ACTION_POWER_CONNECTED)
+            addAction(Intent.ACTION_POWER_DISCONNECTED)
+        }
+        registerReceiver(liveBatteryReceiver, filter)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        try {
+            unregisterReceiver(liveBatteryReceiver)
+        } catch (_: Exception) {}
     }
 
     private fun setupUI() {
@@ -74,7 +104,11 @@ class MainActivity : AppCompatActivity() {
     private fun updateLiveStatus() {
         val info = BatteryHelper.getCurrentBattery(this)
         binding.batteryText.text = "${info.percentage}%"
-        binding.powerSourceText.text = if (info.isCharging) "Charging via ${info.powerSource}" else "On Battery"
+        binding.powerSourceText.text = if (info.isCharging) {
+            "⚡ Charging via ${info.powerSource}"
+        } else {
+            "🔋 On Battery"
+        }
     }
 
     private fun verifyDeviceWithServer(code: String, name: String, replace: Boolean) {
