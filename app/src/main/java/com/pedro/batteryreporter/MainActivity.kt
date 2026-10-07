@@ -1,285 +1,223 @@
-<?xml version="1.0" encoding="utf-8"?>
-<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="#0F172A"
-    android:fitsSystemWindows="true">
+package com.pedro.batteryreporter
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="20dp">
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.net.Uri
+import android.os.Bundle
+import android.view.View
+import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
+import com.pedro.batteryreporter.databinding.ActivityMainBinding
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
 
-        <!-- Intro & Bot Link Card -->
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp"
-            app:cardBackgroundColor="#1E293B"
-            app:cardCornerRadius="16dp"
-            app:strokeColor="#334155"
-            app:strokeWidth="1dp">
+class MainActivity : AppCompatActivity() {
 
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="16dp">
+    private lateinit var binding: ActivityMainBinding
+    private lateinit var prefs: PrefsManager
+    private val client = OkHttpClient()
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="⚡ Battery Reporter"
-                    android:textColor="#38BDF8"
-                    android:textSize="18sp"
-                    android:textStyle="bold" />
+    private val botUsername = "BatteryReporterBot"
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:text="Monitors your device's power levels in the background and sends automated warnings directly to your Telegram bot."
-                    android:textColor="#94A3B8"
-                    android:textSize="13sp" />
+    private val liveBatteryReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            updateLiveStatus()
+        }
+    }
 
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:orientation="horizontal">
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        binding = ActivityMainBinding.inflate(layoutInflater)
+        setContentView(binding.root)
 
-                    <Button
-                        android:id="@+id/openBotButton"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginEnd="6dp"
-                        android:layout_weight="1"
-                        android:backgroundTint="#38BDF8"
-                        android:text="Open Bot"
-                        android:textColor="#0F172A"
-                        android:textSize="12sp" />
+        prefs = PrefsManager(this)
+        setupUI()
+        updateLiveStatus()
+    }
 
-                    <Button
-                        android:id="@+id/shareBotButton"
-                        style="@style/Widget.Material3.Button.TonalButton"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="6dp"
-                        android:layout_weight="1"
-                        android:text="Share Bot"
-                        android:textColor="#FFFFFF"
-                        android:textSize="12sp" />
-                </LinearLayout>
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
+    override fun onResume() {
+        super.onResume()
+        updateLiveStatus()
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_BATTERY_CHANGED)
+            addAction(Intent.ACTION_POWER_CONNECTED)
+            addAction(Intent.ACTION_POWER_DISCONNECTED)
+        }
+        registerReceiver(liveBatteryReceiver, filter)
+    }
 
-        <!-- Current Battery Card -->
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/statusCard"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="16dp"
-            app:cardBackgroundColor="#1E293B"
-            app:cardCornerRadius="16dp"
-            app:strokeColor="#334155"
-            app:strokeWidth="1dp">
+    override fun onPause() {
+        super.onPause()
+        try {
+            unregisterReceiver(liveBatteryReceiver)
+        } catch (_: Exception) {}
+    }
 
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="20dp">
+    private fun setupUI() {
+        binding.deviceNameInput.setText(prefs.deviceName)
+        binding.thresholdSlider.value = prefs.alertThreshold.toFloat().coerceIn(1f, 100f)
+        binding.thresholdLabel.text = "Alert below: ${prefs.alertThreshold}%"
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Current Device Battery"
-                    android:textColor="#94A3B8"
-                    android:textSize="13sp" />
+        binding.openBotButton.setOnClickListener {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("[https://t.me/$botUsername](https://t.me/$botUsername)"))
+            startActivity(intent)
+        }
 
-                <TextView
-                    android:id="@+id/batteryText"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:text="--%"
-                    android:textColor="#FFFFFF"
-                    android:textSize="40sp"
-                    android:textStyle="bold" />
+        binding.shareBotButton.setOnClickListener {
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, "Monitor all your devices in Telegram with Battery Reporter: [https://t.me/$botUsername](https://t.me/$botUsername)")
+            }
+            startActivity(Intent.createChooser(shareIntent, "Share Battery Reporter Bot"))
+        }
 
-                <TextView
-                    android:id="@+id/powerSourceText"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:text="Reading status..."
-                    android:textColor="#38BDF8"
-                    android:textSize="15sp"
-                    android:textStyle="bold" />
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
+        if (prefs.deviceKey != null) {
+            binding.unlinkedCard.visibility = View.GONE
+            binding.linkedCard.visibility = View.VISIBLE
+        } else {
+            binding.unlinkedCard.visibility = View.VISIBLE
+            binding.linkedCard.visibility = View.GONE
+        }
 
-        <!-- Device Name Input -->
-        <com.google.android.material.textfield.TextInputLayout
-            android:id="@+id/nameLayout"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:hint="Device Identifier Name"
-            android:textColorHint="#94A3B8"
-            app:boxStrokeColor="#38BDF8"
-            app:hintTextColor="#38BDF8">
+        binding.thresholdSlider.addOnChangeListener { _, value, _ ->
+            prefs.alertThreshold = value.toInt()
+            binding.thresholdLabel.text = "Alert below: ${value.toInt()}%"
+            if (prefs.deviceKey != null) {
+                triggerInstantReport(isManual = false)
+            }
+        }
 
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/deviceNameInput"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:inputType="textCapWords"
-                android:textColor="#FFFFFF" />
-        </com.google.android.material.textfield.TextInputLayout>
+        binding.verifyButton.setOnClickListener {
+            val code = binding.codeInput.text.toString().trim()
+            val name = binding.deviceNameInput.text.toString().trim().ifEmpty { prefs.deviceName }
+            if (code.length != 6) {
+                Toast.makeText(this, "Please enter a valid 6-digit code", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            prefs.deviceName = name
+            verifyDeviceWithServer(code, name, replace = false)
+        }
 
-        <!-- Threshold Slider (1% to 100%) -->
-        <TextView
-            android:id="@+id/thresholdLabel"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="Alert below: 20%"
-            android:textColor="#CBD5E1" />
+        binding.sendTestButton.setOnClickListener {
+            triggerInstantReport(isManual = true)
+        }
 
-        <com.google.android.material.slider.Slider
-            android:id="@+id/thresholdSlider"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:stepSize="1"
-            android:value="20"
-            android:valueFrom="1"
-            android:valueTo="100" />
+        binding.unlinkButton.setOnClickListener {
+            prefs.clear()
+            setupUI()
+            Toast.makeText(this, "Device disconnected locally", Toast.LENGTH_SHORT).show()
+        }
+    }
 
-        <!-- Unlinked Card -->
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/unlinkedCard"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            app:cardBackgroundColor="#1E293B"
-            app:cardCornerRadius="16dp"
-            app:strokeColor="#334155"
-            app:strokeWidth="1dp">
+    private fun updateLiveStatus() {
+        val info = BatteryHelper.getCurrentBattery(this)
+        binding.batteryText.text = "${info.percentage}%"
+        binding.powerSourceText.text = if (info.isCharging) {
+            "⚡ Charging via ${info.powerSource}"
+        } else {
+            "🔋 On Battery"
+        }
+    }
 
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="20dp">
+    private fun verifyDeviceWithServer(code: String, name: String, replace: Boolean) {
+        binding.verifyProgress.visibility = View.VISIBLE
+        binding.verifyButton.isEnabled = false
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="Pair With Telegram"
-                    android:textColor="#FFFFFF"
-                    android:textSize="16sp"
-                    android:textStyle="bold" />
+        lifecycleScope.launch(Dispatchers.IO) {
+            val json = JSONObject().apply {
+                put("code", code)
+                put("name", name)
+                put("replace", replace)
+            }
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:text="Open the bot and tap /start to generate your 6-digit code."
-                    android:textColor="#94A3B8"
-                    android:textSize="13sp" />
+            val request = Request.Builder()
+                .url("[https://battery-reporter.1pedro.workers.dev/verify](https://battery-reporter.1pedro.workers.dev/verify)")
+                .post(json.toString().toRequestBody("application/json".toMediaType()))
+                .build()
 
-                <com.google.android.material.textfield.TextInputLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:hint="6-Digit Code"
-                    android:textColorHint="#94A3B8"
-                    app:boxStrokeColor="#38BDF8"
-                    app:hintTextColor="#38BDF8">
+            try {
+                val response = client.newCall(request).execute()
+                val bodyStr = response.body?.string() ?: ""
+                val resObj = JSONObject(bodyStr)
 
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/codeInput"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:inputType="number"
-                        android:maxLength="6"
-                        android:textColor="#FFFFFF" />
-                </com.google.android.material.textfield.TextInputLayout>
+                withContext(Dispatchers.Main) {
+                    binding.verifyProgress.visibility = View.GONE
+                    binding.verifyButton.isEnabled = true
 
-                <ProgressBar
-                    android:id="@+id/verifyProgress"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="center"
-                    android:layout_marginTop="8dp"
-                    android:visibility="gone" />
+                    if (response.isSuccessful && resObj.has("key")) {
+                        prefs.deviceKey = resObj.getString("key")
+                        setupUI()
+                        Toast.makeText(this@MainActivity, "Connected to Telegram Bot!", Toast.LENGTH_SHORT).show()
+                        triggerInstantReport(isManual = true)
+                    } else if (response.code == 409) {
+                        Toast.makeText(this@MainActivity, "Device limit reached on your Telegram plan!", Toast.LENGTH_LONG).show()
+                    } else {
+                        Toast.makeText(this@MainActivity, "Error: ${resObj.optString("error", "Invalid code")}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    binding.verifyProgress.visibility = View.GONE
+                    binding.verifyButton.isEnabled = true
+                    Toast.makeText(this@MainActivity, "Connection failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
 
-                <Button
-                    android:id="@+id/verifyButton"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:backgroundTint="#38BDF8"
-                    android:text="Pair Device"
-                    android:textColor="#0F172A" />
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
+    private fun triggerInstantReport(isManual: Boolean) {
+        val key = prefs.deviceKey ?: return
+        val info = BatteryHelper.getCurrentBattery(this)
+        val currentThreshold = prefs.alertThreshold
+        val currentName = binding.deviceNameInput.text.toString().trim().ifEmpty { prefs.deviceName }
+        prefs.deviceName = currentName
 
-        <!-- Linked Card -->
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/linkedCard"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:visibility="gone"
-            app:cardBackgroundColor="#1E293B"
-            app:cardCornerRadius="16dp"
-            app:strokeColor="#334155"
-            app:strokeWidth="1dp">
+        lifecycleScope.launch(Dispatchers.IO) {
+            val json = JSONObject().apply {
+                put("key", key)
+                put("name", currentName)
+                put("battery", info.percentage)
+                put("isCharging", info.isCharging)
+                put("powerSource", info.powerSource)
+                put("threshold", currentThreshold)
+                put("state", if (isManual) "MANUAL" else "SYNC")
+            }
 
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="20dp">
+            val request = Request.Builder()
+                .url("[https://battery-reporter.1pedro.workers.dev/report](https://battery-reporter.1pedro.workers.dev/report)")
+                .post(json.toString().toRequestBody("application/json".toMediaType()))
+                .build()
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="✅ Connected to Telegram"
-                    android:textColor="#4ADE80"
-                    android:textSize="16sp"
-                    android:textStyle="bold" />
+            try {
+                val response = client.newCall(request).execute()
+                val success = response.isSuccessful
+                response.close()
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:text="Reporting is active. Tap the test button to deliver an immediate ping to your Telegram chat."
-                    android:textColor="#94A3B8"
-                    android:textSize="13sp" />
-
-                <Button
-                    android:id="@+id/sendTestButton"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="14dp"
-                    android:backgroundTint="#334155"
-                    android:text="Send Immediate Test Ping"
-                    android:textColor="#FFFFFF" />
-
-                <Button
-                    android:id="@+id/unlinkButton"
-                    style="@style/Widget.Material3.Button.TextButton"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:text="Disconnect This Device"
-                    android:textColor="#F87171" />
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
-
-    </LinearLayout>
-</androidx.core.widget.NestedScrollView>
+                withContext(Dispatchers.Main) {
+                    if (isManual) {
+                        if (success) {
+                            Toast.makeText(this@MainActivity, "Ping sent! Check Telegram.", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(this@MainActivity, "Failed to send ping", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    if (isManual) {
+                        Toast.makeText(this@MainActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }
+}
