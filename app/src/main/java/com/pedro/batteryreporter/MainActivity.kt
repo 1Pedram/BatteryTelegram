@@ -68,14 +68,14 @@ class MainActivity : AppCompatActivity() {
         binding.thresholdLabel.text = "Alert below: ${prefs.alertThreshold}%"
 
         binding.openBotButton.setOnClickListener {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("[https://t.me/$botUsername](https://t.me/$botUsername)"))
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/$botUsername"))
             startActivity(intent)
         }
 
         binding.shareBotButton.setOnClickListener {
             val shareIntent = Intent(Intent.ACTION_SEND).apply {
                 type = "text/plain"
-                putExtra(Intent.EXTRA_TEXT, "Monitor all your devices in Telegram with Battery Reporter: [https://t.me/$botUsername](https://t.me/$botUsername)")
+                putExtra(Intent.EXTRA_TEXT, "Monitor all your devices in Telegram with Battery Reporter: https://t.me/$botUsername")
             }
             startActivity(Intent.createChooser(shareIntent, "Share Battery Reporter Bot"))
         }
@@ -88,13 +88,20 @@ class MainActivity : AppCompatActivity() {
             binding.linkedCard.visibility = View.GONE
         }
 
+        // Use addOnSliderTouchListener so network call only fires when you release the slider, not while dragging
         binding.thresholdSlider.addOnChangeListener { _, value, _ ->
-            prefs.alertThreshold = value.toInt()
             binding.thresholdLabel.text = "Alert below: ${value.toInt()}%"
-            if (prefs.deviceKey != null) {
-                triggerInstantReport(isManual = false)
-            }
         }
+
+        binding.thresholdSlider.addOnSliderTouchListener(object : com.google.android.material.slider.Slider.OnSliderTouchListener {
+            override fun onStartTrackingTouch(slider: com.google.android.material.slider.Slider) {}
+            override fun onStopTrackingTouch(slider: com.google.android.material.slider.Slider) {
+                prefs.alertThreshold = slider.value.toInt()
+                if (prefs.deviceKey != null) {
+                    triggerInstantReport(isManual = false)
+                }
+            }
+        })
 
         binding.verifyButton.setOnClickListener {
             val code = binding.codeInput.text.toString().trim()
@@ -140,7 +147,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             val request = Request.Builder()
-                .url("[https://battery-reporter.1pedro.workers.dev/verify](https://battery-reporter.1pedro.workers.dev/verify)")
+                .url("https://battery-reporter.1pedro.workers.dev/verify")
                 .post(json.toString().toRequestBody("application/json".toMediaType()))
                 .build()
 
@@ -176,10 +183,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun triggerInstantReport(isManual: Boolean) {
         val key = prefs.deviceKey ?: return
-        val info = BatteryHelper.getCurrentBattery(this)
+        
+        // READ UI VALUES HERE ON MAIN THREAD BEFORE ENTERING BACKGROUND COROUTINE
         val currentThreshold = prefs.alertThreshold
-        val currentName = binding.deviceNameInput.text.toString().trim().ifEmpty { prefs.deviceName }
+        val currentName = binding.deviceNameInput.text?.toString()?.trim()?.ifEmpty { prefs.deviceName } ?: prefs.deviceName
         prefs.deviceName = currentName
+
+        val info = BatteryHelper.getCurrentBattery(this)
 
         lifecycleScope.launch(Dispatchers.IO) {
             val json = JSONObject().apply {
@@ -193,7 +203,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             val request = Request.Builder()
-                .url("[https://battery-reporter.1pedro.workers.dev/report](https://battery-reporter.1pedro.workers.dev/report)")
+                .url("https://battery-reporter.1pedro.workers.dev/report")
                 .post(json.toString().toRequestBody("application/json".toMediaType()))
                 .build()
 
