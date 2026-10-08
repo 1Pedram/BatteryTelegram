@@ -1,14 +1,21 @@
 package com.pedro.batteryreporter
 
+import android.Manifest
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.pedro.batteryreporter.databinding.ActivityMainBinding
 import kotlinx.coroutines.Dispatchers
@@ -42,6 +49,11 @@ class MainActivity : AppCompatActivity() {
         prefs = PrefsManager(this)
         setupUI()
         updateLiveStatus()
+        requestSystemPermissions()
+
+        if (prefs.deviceKey != null) {
+            BatteryMonitorService.start(this)
+        }
     }
 
     override fun onResume() {
@@ -60,6 +72,31 @@ class MainActivity : AppCompatActivity() {
         try {
             unregisterReceiver(liveBatteryReceiver)
         } catch (_: Exception) {}
+    }
+
+    private fun requestSystemPermissions() {
+        // 1. Request POST_NOTIFICATIONS on Android 13+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                    101
+                )
+            }
+        }
+
+        // 2. Request native Battery Optimization exemption across Samsung, Xiaomi, Pixel, etc.
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
+            try {
+                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                    data = Uri.parse("package:$packageName")
+                }
+                startActivity(intent)
+            } catch (_: Exception) {}
+        }
     }
 
     private fun setupUI() {
@@ -88,7 +125,6 @@ class MainActivity : AppCompatActivity() {
             binding.linkedCard.visibility = View.GONE
         }
 
-        // Use addOnSliderTouchListener so network call only fires when you release the slider, not while dragging
         binding.thresholdSlider.addOnChangeListener { _, value, _ ->
             binding.thresholdLabel.text = "Alert below: ${value.toInt()}%"
         }
@@ -105,7 +141,7 @@ class MainActivity : AppCompatActivity() {
 
         binding.verifyButton.setOnClickListener {
             val code = binding.codeInput.text.toString().trim()
-            val name = binding.deviceNameInput.text.toString().trim().ifEmpty { prefs.deviceName }
+            val name = binding.deviceNameInput.text?.toString()?.trim()?.ifEmpty { prefs.deviceName } ?: prefs.deviceName
             if (code.length != 6) {
                 Toast.makeText(this, "Please enter a valid 6-digit code", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
@@ -163,6 +199,7 @@ class MainActivity : AppCompatActivity() {
                     if (response.isSuccessful && resObj.has("key")) {
                         prefs.deviceKey = resObj.getString("key")
                         setupUI()
+                        BatteryMonitorService.start(this@MainActivity)
                         Toast.makeText(this@MainActivity, "Connected to Telegram Bot!", Toast.LENGTH_SHORT).show()
                         triggerInstantReport(isManual = true)
                     } else if (response.code == 409) {
@@ -183,8 +220,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun triggerInstantReport(isManual: Boolean) {
         val key = prefs.deviceKey ?: return
-        
-        // READ UI VALUES HERE ON MAIN THREAD BEFORE ENTERING BACKGROUND COROUTINE
         val currentThreshold = prefs.alertThreshold
         val currentName = binding.deviceNameInput.text?.toString()?.trim()?.ifEmpty { prefs.deviceName } ?: prefs.deviceName
         prefs.deviceName = currentName
