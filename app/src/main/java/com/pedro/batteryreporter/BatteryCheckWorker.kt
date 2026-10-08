@@ -10,49 +10,48 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
-import java.util.concurrent.TimeUnit
 
 class BatteryCheckWorker(
-    private val appContext: Context,
+    appContext: Context,
     workerParams: WorkerParameters
 ) : CoroutineWorker(appContext, workerParams) {
 
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(10, TimeUnit.SECONDS)
-        .readTimeout(10, TimeUnit.SECONDS)
-        .build()
+    private val client = OkHttpClient()
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        val prefs = PrefsManager(appContext)
+        val prefs = PrefsManager(applicationContext)
         val key = prefs.deviceKey ?: return@withContext Result.success()
 
-        val info = BatteryHelper.getCurrentBattery(appContext)
+        val info = BatteryHelper.getCurrentBattery(applicationContext)
         val threshold = prefs.alertThreshold
+        val wasCharging = prefs.lastChargingState
         val lastState = prefs.lastReportedState
-        val wasCharging = prefs.lastWasCharging
 
         val currentState = when {
-            info.percentage <= 5 -> "DYING"
-            info.percentage <= threshold -> "LOW"
-            info.percentage >= (threshold + 5) -> "NORMAL"
-            else -> lastState
+            info.percentage <= 5 && !info.isCharging -> "DYING"
+            info.percentage <= threshold && !info.isCharging -> "LOW"
+            else -> "NORMAL"
         }
 
         val stateChanged = (currentState != lastState && currentState != "NORMAL") ||
                 (currentState == "NORMAL" && lastState != "NORMAL")
         val chargingChanged = (wasCharging != info.isCharging)
+        val belowThresholdOnBattery = (!info.isCharging && info.percentage <= threshold)
 
-        if (stateChanged || chargingChanged) {
+        // Dispatch update if state changed, plug/unplug occurred, or battery is below threshold
+        if (stateChanged || chargingChanged || belowThresholdOnBattery) {
             val jsonBody = JSONObject().apply {
                 put("key", key)
+                put("name", prefs.deviceName)
                 put("battery", info.percentage)
                 put("isCharging", info.isCharging)
                 put("powerSource", info.powerSource)
+                put("threshold", threshold)
                 put("state", currentState)
             }
 
             val request = Request.Builder()
-                .url(API_ENDPOINT)
+                .url("https://battery-reporter.1pedro.workers.dev/report")
                 .post(jsonBody.toString().toRequestBody("application/json".toMediaType()))
                 .build()
 
@@ -60,18 +59,18 @@ class BatteryCheckWorker(
                 val response = client.newCall(request).execute()
                 if (response.isSuccessful) {
                     prefs.lastReportedState = currentState
-                    prefs.lastWasCharging = info.isCharging
+                    prefs.lastChargingState = info.isCharging
+                    prefs.lastReportedBattery = info.percentage
+                    response.close()
+                    return@withContext Result.success()
                 }
                 response.close()
-            } catch (_: Exception) {
+                return@withContext Result.retry()
+            } catch (e: Exception) {
                 return@withContext Result.retry()
             }
         }
 
         Result.success()
-    }
-
-    companion object {
-        const val API_ENDPOINT = "https://battery-reporter.1pedro.workers.dev/report"
     }
 }
