@@ -3,13 +3,17 @@ package com.pedro.batteryreporter
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
 
-class PowerConnectionReceiver : BroadcastReceiver() {
+class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
-        // Wake and dispatch an immediate report upon plug, unplug, or critical battery drop
-        val syncRequest = OneTimeWorkRequestBuilder<BatteryCheckWorker>().build()
-        WorkManager.getInstance(context).enqueue(syncRequest)
+        if (intent?.action == Intent.ACTION_BOOT_COMPLETED ||
+            intent?.action == Intent.ACTION_MY_PACKAGE_REPLACED) {
+            
+            val prefs = PrefsManager(context)
+            if (prefs.deviceKey != null) {
+                BatteryMonitorService.start(context)
+                BatteryReporterApp.scheduleBatterySync(context)
+            }
+        }
     }
 }
